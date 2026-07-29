@@ -37,6 +37,8 @@ Phase 4: 最終報告
 - `implementation_plan.md`
 - `*plan*.md`、`*PLAN*.md`
 
+**「完整 Spec」的判準**：檔案必須含有 Chunk（或等價的任務切分）＋驗收條件結構，才能走路徑 A。`TODO.md` 這類功能總覽／待辦清單**一律最多算「任務清單」（路徑 B）**，不可直接當完整 Spec 執行（實測踩坑：1800 行的功能總覽 TODO.md 會被誤判）。
+
 ### 1-2 根據偵測結果決定路徑
 
 **關鍵區分：任務清單 ≠ Spec**
@@ -77,6 +79,8 @@ Phase 4: 最終報告
 
 ### 1-3 重新生成 Spec（僅在未偵測到 spec 時執行）
 
+**覆寫保護**：若當前目錄已有 `just-do-it-spec.md`，先將舊檔歸檔到 `docs/specs/just-do-it-spec-{YYYY-MM-DD}-{舊任務slug}.md`（目錄不存在就建立），再寫新檔。上一輪的規格是歷史紀錄，不可無聲覆寫。
+
 讀取專案上下文：
 1. 偵測技術棧（依序讀取：`package.json` / `pom.xml` / `build.gradle` / `pyproject.toml` / `requirements.txt` / `*.csproj` / `CLAUDE.md`）
 2. 用 Glob 掃描專案結構（忽略 `node_modules/`、`.git/`、`dist/`、`build/`、`target/`）
@@ -96,6 +100,15 @@ Phase 4: 最終報告
 ## 技術範圍
 - 技術棧：
 - 主要影響模組/檔案：
+
+## 介面契約（鎖定，不可偏離）
+
+（自產 spec 也必須有這一節——並行拆 chunk 的場景正是最需要契約的場景。
+把並行 chunk 之間共用的類別名／方法簽名／DTO 欄位／API 路徑／key 規則先在此釘死，
+否則多個 agent 會各自發明命名，事後才在 review 撞出來。
+格式：| 類型 | 識別名 | 定義 |，類型：ENTITY_CLASS / SERVICE_INTERFACE / METHOD_SIGNATURE /
+DTO_CLASS / API_ENDPOINT / FUNCTION_SIGNATURE / DATA_MODEL。
+若任務確實沒有任何跨 chunk 共用介面，寫「無跨 chunk 介面」並說明原因。）
 
 ## Task Chunks
 
@@ -126,6 +139,8 @@ Phase 4: 最終報告
 ### 1-4 Chunk 設計原則
 
 - **單一職責**：每個 chunk 只做一件清楚定義的事（DB schema / API 實作 / 前端元件 / 測試）
+- **檔案互斥（硬規則）**：同一批次並行的 chunks，檔案清單必須互斥。兩個 chunk 要動同一個檔案 → 合併成一個 chunk，或拆到不同批次（Edit 工具要求檔案未被改動，並行寫同一檔第二個 agent 會直接失敗）
+- **每個 chunk 必須明列完整檔案清單**：這是批次排程做互斥檢查的依據，不可省略
 - **最小化相依**：盡量讓 chunks 可以並行執行
 - **有相依性的 chunks** 標記清楚，分批執行
 - **chunk 數量**：不限上限。太小（只有 1 步驟、改 1 個檔案）直接做不用拆；多項任務照單全收，由使用者自行判斷複雜度
@@ -148,6 +163,7 @@ Phase 4: 最終報告
 
 - 無相依的 chunks → 同一批次，並行執行
 - 有相依的 chunks → 等前置批次完成後才執行
+- **排批前做檔案互斥檢查**：同一批次各 chunk 的檔案清單有交集 → 重排（合併 chunk 或錯開批次），不可讓兩個 agent 並行編輯同一檔案
 
 範例：
 ```
@@ -163,30 +179,32 @@ Phase 4: 最終報告
 每個 subagent 的 prompt 結構：
 
 ```
-你是一個實作 agent，負責完成以下任務 chunk。請閱讀 Spec 後直接執行，不需要確認。
+你是一個實作 agent，負責完成以下任務 chunk。請先用 Read 工具讀 `{spec 檔案的絕對路徑}` 取得完整 spec（含介面契約），然後直接執行，不需要確認。
 
 ═══════════════════════════════════════
 你負責的 Chunk：
 [貼入對應 chunk 的完整規格]
 
 ═══════════════════════════════════════
-完整 Spec（供參考上下文）：
-[貼入 just-do-it-spec.md 全文]
-
-═══════════════════════════════════════
 執行要求：
 1. 按照「驗收條件」逐一完成，每條完成後在心中打勾
 2. 只修改此 chunk 規格中列出的檔案範圍
-3. 若發現需要動到 chunk 範圍外的檔案，先做必要的最小修改，並在回報中說明原因
-4. 完成後回報：
+3. 嚴格遵守 spec 的「介面契約」區塊，不可自行發明命名
+4. 若發現需要動到 chunk 範圍外的檔案，先做必要的最小修改，並在回報中說明原因
+5. 完成後用 Write 工具把回報寫入 `.just-do-it/chunk-{N}-report.md`，內容：
    - 修改了哪些檔案（列出路徑）
    - 每個驗收條件的完成狀態
    - 遇到的問題與處理方式（若有）
+   回報以檔案為準——你的最終回覆訊息可能不會送達主線，不要只靠回覆。
 ```
 
 ### 2-3 收集執行結果
 
-等待同批次所有 agents 的**完成通知**即可。**禁止對執行中的 agent 用 SendMessage 輪詢**——背景 agent 的最終回覆只會隨完成通知送達，SendMessage 只會拿到 idle 空通知，報告本體不會過來。
+**回報以檔案為準**：等同批次所有 agents 完成後，用 Read 讀取各 `.just-do-it/chunk-{N}-report.md` 收結果。**不依賴 agent 的回覆訊息、禁止用 SendMessage 向執行中的 agent 索取結果**——實測（2026-07-29）背景 agent 的回覆與完成通知都可能只剩 idle 空殼，只有寫進檔案的回報保證拿得到。
+
+**不信任驗證**：Phase 2 開始前先記錄 `git status` baseline（非 git 專案則記錄影響範圍的檔案清單）；收完回報後用 `git diff --stat` 對照各 chunk 宣稱的檔案清單——多改、漏改、report 檔缺失都當場現形。
+
+**chunk 失敗處理**：report 檔缺失或內容顯示失敗 → 帶失敗原因重派一次；再失敗 → 停止該 chunk，列入最終報告「需要人工處理」。
 
 顯示即時進度：
 
@@ -264,6 +282,10 @@ prompt：
 [貼入 Phase 2 的執行結果]
 
 ═══════════════════════════════════════
+本次實際變更：
+[貼入 git diff --stat（或變更檔案清單），讓你不必自己摸哪些檔案動過]
+
+═══════════════════════════════════════
 審查重點（依優先序）：
 1. **驗收條件覆蓋率**：spec 中每個驗收條件是否都有對應的實作？
 2. **整合正確性**：各 chunk 之間的介面是否一致？有無漏接或命名不符？
@@ -298,9 +320,21 @@ NEEDS_FIX
 | .NET | `*.csproj` / `*.sln` 存在 | `dotnet test` |
 | Go | `*_test.go` 存在 | `go test ./...` |
 
-若無測試框架 → 跳過，在報告中標注「⚠️ 無測試框架，跳過測試驗收」。
+**驗收階梯（fallback，逐級往下找到能跑的為止，「跳過」是最後手段）：**
+
+1. **測試**：上表的測試指令
+2. **type-check**：`tsc --noEmit` / `mypy` / 依技術棧
+3. **build／編譯**：`npm run build` / `mvn -q compile` / `./gradlew compileJava` / `dotnet build`
+4. **語法檢查**：`python -m compileall` / 依技術棧
+5. 全都沒有 → 才在報告「未執行／無法驗收」區標注原因
+
+「無測試框架 → 直接跳過」等於零驗收就宣告完成（2026-07-29 實測踩坑），禁止。
+
+**驗收指令必須非互動**：執行前先確認指令不會進入互動模式（常見地雷：`next lint` 未初始化會跳設定選單、`npm init`）。指令若需要初始化設定檔，**不得擅自初始化**（會新增設定檔、超出任務範圍），標記為「無法驗收」並寫明原因。
 
 ### 3-3 問題修復（最多 1 輪）
+
+**主線直修路徑**：無論問題來自 Code Review 還是主線自己發現，修改範圍 ≤2 個檔案且 ≤20 行 → 主線直接修，不 spawn fix agent（省一次往返），但必須記入最終報告的修復輪區塊。超過此範圍才走 fix agent。
 
 **若 Code Review 回傳 NEEDS_FIX：**
 
@@ -368,6 +402,14 @@ spawn 一個 fix agent（同步執行，`run_in_background: false`）修復失�
     src/zzz.ts
 ```
 
+**「未執行／無法驗收」區**（與「需要人工處理」分開——「沒驗」和「驗了失敗」語意完全不同，混在一起會給假安心）。驗收階梯只要有任何項目沒跑到，必須列出並寫明原因：
+
+```
+── ⚠️ 未執行／無法驗收 ──────────────────
+  - lint：專案未設定 ESLint，未擅自初始化
+  - 測試：無測試框架，已改用 type-check + build 驗收
+```
+
 **若有未解決問題，額外顯示：**
 
 ```
@@ -382,9 +424,11 @@ spawn 一個 fix agent（同步執行，`run_in_background: false`）修復失�
 ## 注意事項
 
 - **不詢問確認**：收到描述後直接執行，不等使用者二次確認
-- **subagent 通訊鐵律**：並行的 chunk agents 用背景執行、等完成通知收結果；review／fix agent 一律同步執行（`run_in_background: false`）。**任何情況下都不用 SendMessage 向 subagent 要結果**——那條路只會拿到 idle 通知，拿不到報告
+- **不可逆操作例外（安全底線，凌駕上一條）**：`git commit`／`git push`／部署／刪除檔案，一律停下來交回使用者決定。Phase 4 出完報告即停，不自行 commit 或 push（部分專案 push main 會直接觸發 CI/CD 上生產）
+- **subagent 通訊鐵律**：並行的 chunk agents 背景執行、回報一律寫 `.just-do-it/` 檔案由主線 Read 收取；review／fix agent 一律同步執行（`run_in_background: false`）。**任何情況下都不用 SendMessage 向 subagent 要結果**——那條路只會拿到 idle 通知，拿不到報告
 - **chunk 之間的相依要嚴格控制**：相依的 chunk 一定要在前置 chunk 完成後才 spawn
 - **每個 subagent 只負責自己的 chunk 範圍**，不要越界修改
 - **fix 輪數上限 1 輪**：超過 1 輪的問題標記為人工處理，不要無限循環
-- **spec 檔案路徑**：`just-do-it-spec.md` 放在執行 skill 時的當前工作目錄
-- 若任務描述非常小（只有一個步驟、改一個檔案）→ 不需要拆 chunk，直接執行，不使用 subagent
+- **spec 檔案路徑**：`just-do-it-spec.md` 放在執行 skill 時的當前工作目錄；寫檔前若已存在，先歸檔（見 1-3 覆寫保護）
+- **兩層門檻，管不同層**：整個任務 ≤3 個檔案 → 根本不進本 skill，直接做（全域 CLAUDE.md 路由層）；進了本 skill 之後，單一 chunk ≤1 個檔案且 ≤30 行 → 主線直接做，不 spawn subagent（chunk 層）
+- **`.just-do-it/` 是暫存目錄**：回報檔用完即棄，結束時提示使用者可刪除；專案有 .gitignore 時建議把 `.just-do-it/` 加入

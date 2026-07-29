@@ -146,6 +146,8 @@ _Avoid_: LeaveApplication, AbsenceForm, 假勤申請
 
 寫入 `just-do-it-spec.md`（當前目錄）。**格式必須命中 /just-do-it 的「路徑 A：完整 Spec」判定**（有具體檔案路徑 + 驗收條件），讓它直接跳 Phase 2 並行執行，不重跑 spec 生成。
 
+**覆寫保護**：該檔已存在（上一輪任務的規格）→ 先歸檔到 `docs/specs/just-do-it-spec-{YYYY-MM-DD}-{舊slug}.md` 再寫新檔，不無聲覆寫。
+
 ```markdown
 # [任務名稱] — Just Do It Spec
 
@@ -186,6 +188,8 @@ _Avoid_: LeaveApplication, AbsenceForm, 假勤申請
 - [ ] 不破壞現有功能
 - [ ] 完工後執行 /make-spec --close 回寫台帳
 ```
+
+**chunk 切分硬規則**：可並行（同批次）的 chunks 檔案清單必須互斥——兩個 chunk 要動同一檔案，就合併成一個 chunk 或標相依錯開批次（並行編輯同一檔案，第二個 agent 的 Edit 會直接失敗）。每個 chunk 的檔案清單必須完整明列，這是 /just-do-it 排批做互斥檢查的依據。
 
 寫完顯示摘要：契約 N 筆（既有 X／新增 Y／變更 Z）、chunk M 個，提示可執行 `/just-do-it`。
 
