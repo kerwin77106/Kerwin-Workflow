@@ -186,7 +186,9 @@ Phase 4: 最終報告
 
 ### 2-3 收集執行結果
 
-等待同批次所有 agents 完成，顯示即時進度：
+等待同批次所有 agents 的**完成通知**即可。**禁止對執行中的 agent 用 SendMessage 輪詢**——背景 agent 的最終回覆只會隨完成通知送達，SendMessage 只會拿到 idle 空通知，報告本體不會過來。
+
+顯示即時進度：
 
 ```
 ⚡ Phase 2 執行中
@@ -222,7 +224,7 @@ Phase 4: 最終報告
 
 **不符處理（核對→修正→重核迴圈）：**
 
-spawn 一個 fix agent，prompt：
+spawn 一個 fix agent（**同步執行，`run_in_background: false`**，循序步驟無並行需求），prompt：
 
 ```
 你是一個 Fix agent，以下實作偏離了 spec 的介面契約，請修正：
@@ -244,7 +246,11 @@ spawn 一個 fix agent，prompt：
 
 ### 3-1 Code Review
 
-Spawn 一個 `general-purpose` review agent，prompt：
+Spawn 一個 `general-purpose` review agent。**必須同步執行（`run_in_background: false`）、不取名字**——Agent 工具的回傳值就是審查報告，同步執行讓報告送達成為原子操作。
+
+> 為什麼強制同步（2026-07-29 實際踩坑）：review agent 曾被背景執行＋SendMessage 輪詢，結果它做完的完整 NEEDS_FIX 報告只留在自己的 transcript 裡，orchestrator 只收到兩次 idle 空通知，17 分鐘的驗證全部作廢、review 被重做一遍。review 是單線步驟，同步執行沒有任何代價。
+
+prompt：
 
 ```
 你是一個 Code Review agent，請針對以下實作進行嚴格審查。
@@ -298,7 +304,7 @@ NEEDS_FIX
 
 **若 Code Review 回傳 NEEDS_FIX：**
 
-spawn 一個 fix agent 處理所有列出的問題：
+spawn 一個 fix agent（同步執行，`run_in_background: false`）處理所有列出的問題：
 
 ```
 你是一個 Fix agent，根據以下 Code Review 意見進行修正。
@@ -316,7 +322,7 @@ Review 意見：
 
 **若測試失敗：**
 
-spawn 一個 fix agent 修復失敗的測試：
+spawn 一個 fix agent（同步執行，`run_in_background: false`）修復失敗的測試：
 
 ```
 你是一個 Fix agent，以下測試執行失敗，請修復：
@@ -376,6 +382,7 @@ spawn 一個 fix agent 修復失敗的測試：
 ## 注意事項
 
 - **不詢問確認**：收到描述後直接執行，不等使用者二次確認
+- **subagent 通訊鐵律**：並行的 chunk agents 用背景執行、等完成通知收結果；review／fix agent 一律同步執行（`run_in_background: false`）。**任何情況下都不用 SendMessage 向 subagent 要結果**——那條路只會拿到 idle 通知，拿不到報告
 - **chunk 之間的相依要嚴格控制**：相依的 chunk 一定要在前置 chunk 完成後才 spawn
 - **每個 subagent 只負責自己的 chunk 範圍**，不要越界修改
 - **fix 輪數上限 1 輪**：超過 1 輪的問題標記為人工處理，不要無限循環
