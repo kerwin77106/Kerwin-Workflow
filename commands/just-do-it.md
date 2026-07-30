@@ -191,7 +191,7 @@ DTO_CLASS / API_ENDPOINT / FUNCTION_SIGNATURE / DATA_MODEL。
 2. 只修改此 chunk 規格中列出的檔案範圍
 3. 嚴格遵守 spec 的「介面契約」區塊，不可自行發明命名
 4. 若發現需要動到 chunk 範圍外的檔案，先做必要的最小修改，並在回報中說明原因
-5. 完成後用 Write 工具把回報寫入 `.just-do-it/chunk-{N}-report.md`，內容：
+5. 完成後用 Write 工具把回報寫入 `.just-do-it/chunk-{N}-report.md`（`{N}` 用該 chunk 在 spec 裡的編號，數字或字母皆可，與 spec 一致即可），內容：
    - 修改了哪些檔案（列出路徑）
    - 每個驗收條件的完成狀態
    - 遇到的問題與處理方式（若有）
@@ -431,4 +431,5 @@ spawn 一個 fix agent（同步執行，`run_in_background: false`）修復失�
 - **fix 輪數上限 1 輪**：超過 1 輪的問題標記為人工處理，不要無限循環
 - **spec 檔案路徑**：`just-do-it-spec.md` 放在執行 skill 時的當前工作目錄；寫檔前若已存在，先歸檔（見 1-3 覆寫保護）
 - **兩層門檻，管不同層**：整個任務 ≤3 個檔案 → 根本不進本 skill，直接做（全域 CLAUDE.md 路由層）；進了本 skill 之後，單一 chunk ≤1 個檔案且 ≤30 行 → 主線直接做，不 spawn subagent（chunk 層）
-- **`.just-do-it/` 是暫存目錄**：回報檔用完即棄，結束時提示使用者可刪除；專案有 .gitignore 時建議把 `.just-do-it/` 加入
+- **`.just-do-it/` 是暫存目錄**：回報檔用完即棄，結束時提示使用者可刪除
+- **版控歸屬**：`.just-do-it/` 與 `just-do-it-spec.md` 加入 `.gitignore`（單次任務暫存物）；`CONTEXT.md`、`INTERFACES.md`、`docs/specs/` 則應進版控（長存知識資產）。首次遇到未設定的專案時一併處理並告知使用者

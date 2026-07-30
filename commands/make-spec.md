@@ -94,15 +94,22 @@ description: 規格精煉器 — 把「跟使用者討論完的結論」精煉�
 3. **增量判定**（本次任務動到既有模組時）：
    - 從 `INTERFACES.md` 撈出相關介面，**並用 Grep 對實碼確認仍成立**（台帳可能過時；矛盾時以 code 為準，順手更新台帳並告知使用者）
    - 台帳沒有但 code 有的介面 → **懶建**：只把本次任務會碰到的介面補進台帳，不做全專案反向工程
-4. 對照 `spec-lessons.md`，把相關教訓列入本次注意事項。
+4. **共用基礎設施盤點（強制，防漏工）**：任務含「新增頁面／路由／API 端點／新模組」時，必須 Grep 一次會被連帶影響的共用檔案，命中的一律列進契約表或明確指派給某個 chunk：
+   - 路由保護／公開頁白名單（`middleware.ts`、security config、攔截器設定）
+   - 路由註冊表（`router.py`、路由 index、sitemap、導覽選單）
+   - 共用設定（環境變數樣板、i18n 語系檔清單、DI 註冊、常數檔）
+
+   這類檔案不屬於任何功能面向的 chunk，是**系統性會被漏掉**的類別（2026-07-29 實測：8 個 chunk 全都沒認領 `middleware.ts` 的 `publicPages`，施工中才發現）。步驟 5 的契約認領檢查只做「契約表→chunk」的正向驗證，抓不到「契約表本身就漏了這個檔案」，所以必須在這裡盤點。
+5. 對照 `spec-lessons.md`，把相關教訓列入本次注意事項。
 
 ## 步驟 3：推導契約表 → ★確認閘門
 
 ### 契約表格式（兩區）
 
-**契約類型**（依專案語言選用）：
-- OOP 語言：`ENTITY_CLASS`、`REPOSITORY_CLASS`、`SERVICE_INTERFACE`、`METHOD_SIGNATURE`、`DTO_CLASS`、`API_ENDPOINT`
+**契約類型**（依專案技術棧選用，不夠用可延伸，但延伸時沿用同一命名風格）：
+- OOP 後端：`ENTITY_CLASS`、`REPOSITORY_CLASS`、`SERVICE_INTERFACE`、`METHOD_SIGNATURE`、`DTO_CLASS`、`API_ENDPOINT`
 - 函式導向：`MODULE_INTERFACE`、`FUNCTION_SIGNATURE`、`DATA_MODEL`
+- 前端／全端：`PAGE_ROUTE`（頁面路由）、`COMPONENT`（元件）、`I18N_NAMESPACE`（翻譯命名空間）、`I18N_KEY`（具體翻譯鍵）、`STORE_SLICE`（狀態切片）、`CONSTANT`（共用常數）
 
 ```markdown
 ## 介面契約
@@ -235,6 +242,18 @@ _Avoid_: LeaveApplication, AbsenceForm, 假勤申請
 
 狀態：`計畫中` → `已實作` → `已棄用`。本次新增/變更的契約以「計畫中」寫入。台帳不存在時先問是否建立。
 
+**「已知落差」區（必備）**：本次刻意不做、但未來會咬人的事，寫在台帳末尾獨立小節。刻意留下的技術債要有固定住所，下次任務讀台帳就會看到，不會只躺在某次對話紀錄裡：
+
+```markdown
+### 已知落差（非台帳異常，記錄供未來任務參考）
+- Pricing 頁描述的「Lite 輕裝版」在 `users.plan` enum 沒有對應值，純文案層級，尚無後端邏輯
+- `notion.py` 的 Pro 權限判斷沒檢查 `plan_expires_at` 到期，屬既有 bug，不在本次任務範圍
+```
+
+**版控歸屬**（首次建立時一併處理，並告知使用者）：
+- 進版控：`CONTEXT.md`、`INTERFACES.md`、`docs/specs/`（長存知識資產，團隊與未來的自己都要看）
+- 加入 `.gitignore`：`just-do-it-spec.md`、`.just-do-it/`（單次任務的暫存物，用完即棄）
+
 ---
 
 ## /make-spec --close — 完工回寫
@@ -242,8 +261,19 @@ _Avoid_: LeaveApplication, AbsenceForm, 假勤申請
 1. 讀台帳所有「計畫中」項目
 2. 逐項 Grep 實碼比對（識別名、簽名是否一致）
 3. 相符 → 狀態改「已實作」，更新日期
-4. 不符 → 列出差異問使用者：**改 code 對齊台帳，還是改台帳承認現況？** 不擅自二選一
-5. 若本次施工暴露了 spec 缺陷 → 走 lesson 捕捉（見下）
+4. **不符 → 先分類，再決定要不要問**（三類處置不同，不可一律當成「要問使用者」）：
+
+   | 類型 | 判斷依據 | 處置 |
+   |------|---------|------|
+   | (a) 實作偏離契約，契約是對的 | 契約當初就正確，實作沒照做 | **問使用者**：改 code 對齊契約，還是承認現況？不擅自二選一 |
+   | (b) 契約當初寫錯，實作是對的 | 施工時發現 spec 記載與事實不符（陣列長度、既有編號、既有簽名） | **直接更新台帳承認現況**，不必問，但必須在回報中明確告知改了哪幾筆、原記載是什麼 |
+   | (c) 語意漂移，兩邊都說得通 | 命名或職責邊界改變，難說誰對 | **必須問使用者**，附上兩種寫法的影響範圍 |
+
+   (b) 類同時要走 lesson 捕捉——「spec 記載與事實不符」正是產 spec 階段的缺陷。
+
+5. **施工中新增的契約**：台帳沒有、但施工確認需要的介面（常見於共用基礎設施），補進台帳並註明「施工中發現的契約缺口，spec 未認領」，同時走 lesson 捕捉。
+6. 若本次施工暴露了 spec 缺陷 → 走 lesson 捕捉（見下）
+7. **歸檔 spec**：台帳全部翻成「已實作」後，把 `just-do-it-spec.md` 歸檔到 `docs/specs/just-do-it-spec-{YYYY-MM-DD}-{slug}.md`——任務完工就是施工單的生命終點，不必留一份過期 spec 在專案根目錄等下次被覆寫。順帶提示使用者 `.just-do-it/` 的 report 檔可以刪了。
 
 ## spec-lessons.md — 教訓庫
 
